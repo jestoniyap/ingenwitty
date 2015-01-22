@@ -1,19 +1,22 @@
 //
-//  FeedViewController.swift
+//  ProfileViewController.swift
 //  ingenWitty
 //
-//  Created by cortanaOS on 1/14/15.
+//  Created by cortanaOS on 1/19/15.
 //  Copyright (c) 2015 cortanaOS. All rights reserved.
 //
 
 import UIKit
 
-class FeedViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
-    
-    @IBOutlet var tableView: UITableView!
+class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
     
     var imageCache = [String : UIImage]()
     var posts = [PostModel]()
+    
+    @IBOutlet var firstNameLabel : UILabel!
+    @IBOutlet var lastNameLabel : UILabel!
+    @IBOutlet var pictureImageView : UIImageView!
+    @IBOutlet var tableView: UITableView!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,13 +24,8 @@ class FeedViewController: UIViewController, UITableViewDelegate, UITableViewData
     
     override func viewWillAppear(animated: Bool) {
         super.viewWillAppear(animated)
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: "reloadFeedTable:", name: "reloadFeedTable", object: nil)
+        self.loadUserProfile()
         self.loadFeedTable()
-    }
-    
-    override func viewWillDisappear(animated: Bool) {
-        super.viewWillDisappear(animated)
-        NSNotificationCenter.defaultCenter().removeObserver(self, name: "reloadFeedTable", object: nil)
     }
     
     override func didReceiveMemoryWarning() {
@@ -35,20 +33,48 @@ class FeedViewController: UIViewController, UITableViewDelegate, UITableViewData
         // Dispose of any resources that can be recreated.
     }
     
-    // NSNotification
-    func reloadFeedTable(notification: NSNotification) {
-        self.loadFeedTable()
+    // Methods
+    
+    func loadUserProfile(){
+        UserProfileManager.getUserProfileDataWithSuccess { (userProfileData) -> Void in
+            
+            let json = JSON(data: userProfileData)
+            
+            var user = UserModel(userId: json["user"]["pk"].stringValue, firstName: json["user"]["first_name"].stringValue, lastName: json["user"]["last_name"].stringValue, email: json["user"]["email"].stringValue, username: json["user"]["username"].stringValue)
+            
+            var userprofile = UserProfileModel(userprofileId: json["pk"].stringValue, user: user, createdOn: json["created_on"].stringValue, picture: json["picture"].stringValue)
+            
+            var imageUrlString = userprofile.picture
+            var image = self.imageCache[imageUrlString]
+            
+            if (image == nil){
+                Client.downloadImageAsync(imageUrlString, completion:{(image, error) -> Void in
+                    self.imageCache[imageUrlString] = image
+                    dispatch_async(dispatch_get_main_queue(), {
+                        self.pictureImageView.image = image
+                    })
+                })
+            }else{
+                dispatch_async(dispatch_get_main_queue(), {
+                    self.pictureImageView.image = image
+                })
+            }
+            
+            dispatch_async(dispatch_get_main_queue()) {
+                self.firstNameLabel.text = userprofile.user.firstName
+                self.lastNameLabel.text = userprofile.user.lastName
+            }
+        }
     }
     
-    // Methods
     func loadFeedTable() {
-        PostManager.getPostsDataWithSuccess { (postsData) -> Void in
+        PostManager.getUserPostsDataWithSuccess { (postsData) -> Void in
             
             self.posts = [PostModel]()
             
             let json = JSON(data: postsData)
             
-            if let postArray = json["results"].arrayValue {
+            if let postArray = json.arrayValue {
                 
                 for postDict in postArray {
                     var postId: String? = postDict["pk"].stringValue
@@ -74,6 +100,11 @@ class FeedViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
     
     // Event Handlers
+    @IBAction func logoutUser(sender : AnyObject) {
+        NSUserDefaults.standardUserDefaults().setObject(nil, forKey: "accessToken")
+        NSNotificationCenter.defaultCenter().postNotificationName("dismissMainTabBarController", object: nil)
+    }
+
     @IBAction func commentPost(sender : UIButton) {
         dispatch_async(dispatch_get_main_queue()) {
             let pointInTable: CGPoint = sender.convertPoint(sender.bounds.origin, toView: self.tableView)
@@ -93,7 +124,6 @@ class FeedViewController: UIViewController, UITableViewDelegate, UITableViewData
     }
     
     func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
-        
         let cell: FeedCell = tableView.dequeueReusableCellWithIdentifier("feedCell", forIndexPath: indexPath) as FeedCell
         
         if self.posts.count < 1{
@@ -122,6 +152,7 @@ class FeedViewController: UIViewController, UITableViewDelegate, UITableViewData
                 cell.authorImageView.image = image
             })
         }
+        
         return cell
     }
     

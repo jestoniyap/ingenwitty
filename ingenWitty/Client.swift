@@ -7,40 +7,38 @@
 //
 
 import Foundation
+import UIKit
 
-let baseUrl = "http://127.0.0.1:8000"
+let baseUrl = "http://127.0.0.1:8000/"
 let authenticateUrl = "http://127.0.0.1:8000/api/authenticate/"
+let requestTokenUrl = "http://127.0.0.1:8000/oauth2/access_token/"
 
-let cliendId = "c7f709cc6ae2f0123e70"
-let clientSecret = "c5d803ba1c0abc59422e5bf1f5b1b6a1631f1767"
+let clientId = "8525ee8e82454571f09f"
+let clientSecret = "d9af36caeb89b99b94475058399e223d1a087ff6"
 
-let UsersURL = "http://127.0.0.1:8000/users/"
 
 class Client {
     
     class func authenticateWithCredentials(params: Dictionary<String, String>, completion:(data: NSData?, error: NSError?) -> Void) {
         
-        var request = NSMutableURLRequest(URL: NSURL(string: authenticateUrl)!)
-        let config = NSURLSessionConfiguration.defaultSessionConfiguration()
-        request.HTTPMethod = "POST"
-        
-        var err: NSError?
-        request.HTTPBody = NSJSONSerialization.dataWithJSONObject(params, options: nil, error: &err)
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
         let username = params["username"] as String!
         let password = params["password"] as String!
-        let credentialsString = "\(username):\(password)"
-        let credentialsData = credentialsString.dataUsingEncoding(NSUTF8StringEncoding)
-        let base64EncodedCredential = credentialsData!.base64EncodedStringWithOptions(nil)
         
-        let authString = "Basic \(base64EncodedCredential)"
-        config.HTTPAdditionalHeaders = ["Authorization" : authString]
-        let session = NSURLSession(configuration: config)
+        let payload = "grant_type=password" + "&username=\(username)" + "&password=\(password)" +
+            "&client_id=\(clientId)" + "&client_secret=\(clientSecret)";
+        
+        let session = NSURLSession.sharedSession()
+        var request = NSMutableURLRequest(URL: NSURL(string: requestTokenUrl)!)
+        request.HTTPMethod = "POST"
+        
+        request.HTTPBody = payload.dataUsingEncoding(NSUTF8StringEncoding)
+        request.addValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         var task = session.dataTaskWithRequest(request, completionHandler: {data, response, error -> Void in
-            
+            let json = JSON(data: data)
+            println("RESULT: ")
+            println(json)
             if let responseError = error {
                 completion(data: nil, error: responseError)
             } else if let httpResponse = response as? NSHTTPURLResponse {
@@ -48,6 +46,10 @@ class Client {
                     var statusError = NSError(domain:"com.ingenuityph", code:httpResponse.statusCode, userInfo:[NSLocalizedDescriptionKey : "HTTP status code has unexpected value."])
                     completion(data: nil, error: statusError)
                 } else {
+                    if let accessToken = json["access_token"].stringValue{
+                        println("access_token: " + accessToken)
+                        NSUserDefaults.standardUserDefaults().setObject(accessToken, forKey: "accessToken")
+                    }
                     completion(data: data, error: nil)
                 }
             }
@@ -57,17 +59,23 @@ class Client {
         
     }
     
-    class func getRequestFromURL(url: NSURL, completion:(data: NSData?, error: NSError?) -> Void) {
-        let config = NSURLSessionConfiguration.defaultSessionConfiguration()
-        let userPasswordString = "admin:admin"
-        let userPasswordData = userPasswordString.dataUsingEncoding(NSUTF8StringEncoding)
-        let base64EncodedCredential = userPasswordData!.base64EncodedStringWithOptions(nil)
-        let authString = "Basic \(base64EncodedCredential)"
-        config.HTTPAdditionalHeaders = ["Authorization" : authString]
-        let session = NSURLSession(configuration: config)
+    class func getRequestFromResource(resource: String, completion:(data: NSData?, error: NSError?) -> Void) {
+        let requestUrl = baseUrl + resource + "/"
         
-        let loadDataTask = session.dataTaskWithURL(url, completionHandler: { (data: NSData!, response: NSURLResponse!, error: NSError!) -> Void in
-            
+        let accessToken = NSUserDefaults.standardUserDefaults().objectForKey("accessToken") as String
+        let authString = "Bearer \(accessToken)"
+        
+        let session = NSURLSession.sharedSession()
+        var request = NSMutableURLRequest(URL: NSURL(string: requestUrl)!)
+        request.HTTPMethod = "GET"
+        request.setValue(authString, forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let loadDataTask = session.dataTaskWithRequest(request, completionHandler: { (data: NSData!, response: NSURLResponse!, error: NSError!) -> Void in
+            let json = JSON(data: data)
+            println("RESULT: ")
+            println(json)
             if let responseError = error {
                 completion(data: nil, error: responseError)
             } else if let httpResponse = response as? NSHTTPURLResponse {
@@ -81,5 +89,69 @@ class Client {
         })
         
         loadDataTask.resume()
+    }
+    
+    class func postRequestToResource(resource: String, params: Dictionary<String, String>, completion:(data: NSData?, error: NSError?) -> Void) {
+        let requestUrl = baseUrl + resource + "/"
+        let accessToken = NSUserDefaults.standardUserDefaults().objectForKey("accessToken") as String
+        let authString = "Bearer \(accessToken)"
+        
+        let session = NSURLSession.sharedSession()
+        var request = NSMutableURLRequest(URL: NSURL(string: requestUrl)!)
+        var err: NSError?
+        request.HTTPBody = NSJSONSerialization.dataWithJSONObject(params, options: nil, error: &err)
+        request.HTTPMethod = "POST"
+        request.setValue(authString, forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let loadDataTask = session.dataTaskWithRequest(request, completionHandler: { (data: NSData!, response: NSURLResponse!, error: NSError!) -> Void in
+            let json = JSON(data: data)
+            println("RESULT: ")
+            println(json)
+            if let responseError = error {
+                completion(data: nil, error: responseError)
+            } else if let httpResponse = response as? NSHTTPURLResponse {
+                if httpResponse.statusCode != 200 {
+                    var statusError = NSError(domain:"com.ingenuityph", code:httpResponse.statusCode, userInfo:[NSLocalizedDescriptionKey : "HTTP status code has unexpected value."])
+                    completion(data: nil, error: statusError)
+                } else {
+                    completion(data: data, error: nil)
+                }
+            }
+        })
+        
+        loadDataTask.resume()
+    }
+    
+    class func downloadImageAsync(urlString: String, completion:(image: UIImage?, error: NSError?) -> Void)
+    {
+        var url: NSURL
+        var firstChar = urlString[urlString.startIndex]
+        
+        if firstChar == "/" {
+            let newUrl = baseUrl + dropFirst(urlString)
+            println("MISSING BASE URL! APPENDED BASE URL:")
+            println(newUrl)
+            url = NSURL(string: newUrl)!
+        }else{
+            url = NSURL(string: urlString)!
+        }
+        
+        var imageRequest: NSURLRequest = NSURLRequest(URL: url)
+        NSURLConnection.sendAsynchronousRequest(imageRequest,
+            queue: NSOperationQueue.mainQueue(),
+            completionHandler:{response, data, error in
+                if let responseError = error {
+                    completion(image: UIImage(data: data), error: responseError)
+                } else if let httpResponse = response as? NSHTTPURLResponse {
+                    if httpResponse.statusCode != 200 {
+                        var statusError = NSError(domain:"com.ingenuityph", code:httpResponse.statusCode, userInfo:[NSLocalizedDescriptionKey : "HTTP status code has unexpected value."])
+                        completion(image: UIImage(data: data), error: statusError)
+                    } else {
+                        completion(image: UIImage(data: data), error: error)
+                    }
+                }
+        })
     }
 }

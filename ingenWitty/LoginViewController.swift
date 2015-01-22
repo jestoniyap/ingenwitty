@@ -8,7 +8,7 @@
 
 import UIKit
 
-class LoginViewController: UIKit.UIViewController {
+class LoginViewController: UIViewController {
     
     @IBOutlet var usernameField : UITextField!
     @IBOutlet var passwordField : UITextField!
@@ -16,6 +16,14 @@ class LoginViewController: UIKit.UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+    }
+    
+    override func viewWillAppear(animated: Bool) {
+        super.viewWillAppear(animated)
+        self.usernameField.text = ""
+        self.passwordField.text = ""
+        self.errorLabel.text = ""
+        self.usernameField.becomeFirstResponder()
     }
 
     override func didReceiveMemoryWarning() {
@@ -37,7 +45,7 @@ class LoginViewController: UIKit.UIViewController {
                 if (data != nil){
                     dispatch_async(dispatch_get_main_queue()) {
                         let storyboard = UIStoryboard(name: "Main", bundle: nil)
-                        let vc = storyboard.instantiateViewControllerWithIdentifier("feedViewController") as UIViewController
+                        let vc = storyboard.instantiateViewControllerWithIdentifier("mainTabBarController") as UIViewController
                         self.presentViewController(vc, animated: true, completion: nil)
                     }
                 }else{
