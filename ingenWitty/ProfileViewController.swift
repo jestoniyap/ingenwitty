@@ -8,15 +8,18 @@
 
 import UIKit
 
-class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource {
-    
-    var imageCache = [String : UIImage]()
-    var posts = [PostModel]()
+class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewDataSource, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
     
     @IBOutlet var firstNameLabel : UILabel!
     @IBOutlet var lastNameLabel : UILabel!
     @IBOutlet var pictureImageView : UIImageView!
     @IBOutlet var tableView: UITableView!
+    
+    var imagePicker = UIImagePickerController()
+    
+    var imageCache = [String : UIImage]()
+    var posts = [PostModel]()
+    var isFromUpload = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -24,8 +27,12 @@ class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewD
     
     override func viewWillAppear(animated: Bool) {
         super.viewWillAppear(animated)
-        self.loadUserProfile()
-        self.loadFeedTable()
+        if self.isFromUpload {
+            self.isFromUpload = false
+        }else{
+            self.loadUserProfile()
+            self.loadFeedTable()
+        }
     }
     
     override func didReceiveMemoryWarning() {
@@ -33,8 +40,7 @@ class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewD
         // Dispose of any resources that can be recreated.
     }
     
-    // Methods
-    
+    // MARK: Methods
     func loadUserProfile(){
         UserProfileManager.getUserProfileDataWithSuccess { (userProfileData) -> Void in
             
@@ -99,7 +105,7 @@ class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewD
         }
     }
     
-    // Event Handlers
+    // MARK: Event Handlers
     @IBAction func logoutUser(sender : AnyObject) {
         NSUserDefaults.standardUserDefaults().setObject(nil, forKey: "accessToken")
         NSNotificationCenter.defaultCenter().postNotificationName("dismissMainTabBarController", object: nil)
@@ -118,7 +124,49 @@ class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewD
         }
     }
     
-    // UITableController
+    @IBAction func changeProfilePicture(sender: AnyObject) {
+        let optionMenu = UIAlertController(title: nil, message: "Change Profile Picture", preferredStyle: .ActionSheet)
+        
+        self.isFromUpload = true
+
+        let takePhotoAction = UIAlertAction(title: "Take Photo", style: .Default, handler: {
+            (alert: UIAlertAction!) -> Void in
+            self.imagePicker.modalPresentationStyle = UIModalPresentationStyle.CurrentContext
+            self.imagePicker.sourceType = UIImagePickerControllerSourceType.Camera
+            self.imagePicker.delegate = self
+            self.presentViewController(self.imagePicker, animated: true, completion: nil)
+        })
+        
+        let fromPhotoLibraryAction = UIAlertAction(title: "Photo Library", style: .Default, handler: {
+            (alert: UIAlertAction!) -> Void in
+            self.imagePicker.modalPresentationStyle = UIModalPresentationStyle.CurrentContext
+            self.imagePicker.sourceType = UIImagePickerControllerSourceType.PhotoLibrary
+            self.imagePicker.delegate = self
+            self.presentViewController(self.imagePicker, animated: true, completion: nil)
+        })
+        
+        let fromSavedPhotosAction = UIAlertAction(title: "Saved Photos", style: .Default, handler: {
+            (alert: UIAlertAction!) -> Void in
+            self.imagePicker.modalPresentationStyle = UIModalPresentationStyle.CurrentContext
+            self.imagePicker.sourceType = UIImagePickerControllerSourceType.SavedPhotosAlbum
+            self.imagePicker.delegate = self
+            self.presentViewController(self.imagePicker, animated: true, completion: nil)
+        })
+
+        let cancelAction = UIAlertAction(title: "Cancel", style: .Cancel, handler: {
+            (alert: UIAlertAction!) -> Void in
+            self.isFromUpload = false
+        })
+        
+        optionMenu.addAction(takePhotoAction)
+        optionMenu.addAction(fromPhotoLibraryAction)
+        optionMenu.addAction(fromSavedPhotosAction)
+        optionMenu.addAction(cancelAction)
+    
+        self.presentViewController(optionMenu, animated: true, completion: nil)
+    }
+    
+    // MARK: UITableController
     func tableView(tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return self.posts.count
     }
@@ -156,5 +204,21 @@ class ProfileViewController: UIViewController, UITableViewDelegate, UITableViewD
         return cell
     }
     
+    // MARK: UIImagePicker
+    func imagePickerController(picker: UIImagePickerController!, didFinishPickingMediaWithInfo info:NSDictionary!) {
+        let tempImage = info[UIImagePickerControllerOriginalImage] as UIImage
+        
+        UserProfileManager.updateUserProfilePictureWithSuccess(tempImage, success: { (userProfileData) -> Void in
+            self.isFromUpload = true
+            self.loadUserProfile()
+            self.loadFeedTable()
+        })
+        
+        picker.dismissViewControllerAnimated(true, completion: nil)
+    }
+    
+    func imagePickerControllerDidCancel(picker: UIImagePickerController!) {
+        picker.dismissViewControllerAnimated(true, completion: nil)
+    }
     
 }
